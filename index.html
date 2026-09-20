@@ -1,0 +1,1138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>FAT T-REX Pixel Runner</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        body { 
+            margin: 0; padding: 0; overflow: hidden; 
+            background-color: #222; color: #fff; 
+            font-family: 'Press Start 2P', cursive; 
+            touch-action: none; 
+        }
+        #game-container { position: relative; width: 100vw; height: 100vh; }
+        canvas { display: block; width: 100%; height: 100%; object-fit: cover; }
+        
+        .ui-layer { 
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; 
+            pointer-events: none; transition: opacity 0.3s;
+        }
+        .ui-layer.hidden { opacity: 0; pointer-events: none; visibility: hidden; }
+        .ui-layer.active { opacity: 1; pointer-events: auto; visibility: visible; }
+        
+        button {
+            font-family: 'Press Start 2P', cursive;
+            background: rgba(0,0,0,0.5); color: #fff;
+            border: 4px solid #fff; padding: 15px 30px; margin: 8px;
+            font-size: 16px; cursor: pointer; text-transform: uppercase;
+            box-shadow: 4px 4px 0 #888; transition: all 0.1s;
+            min-width: 240px;
+        }
+        button:active { transform: translate(4px, 4px); box-shadow: none; }
+        
+        @keyframes floatTitle {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-12px); }
+        }
+        .main-title {
+            font-size: 50px;
+            text-shadow: 5px 5px 0 #888;
+            color: #fff;
+            text-align: center;
+            margin-bottom: 25px;
+            animation: floatTitle 2s ease-in-out infinite;
+            display: inline-block;
+            line-height: 1.2;
+        }
+        
+        #store-menu, #map-menu { background: rgba(0,0,0,0.9); z-index: 15; }
+        .store-panel { display: flex; flex-direction: column; align-items: center; width: 90%; max-width: 440px; }
+        
+        .store-settings { margin: 20px 0; display: flex; flex-direction: column; align-items: center; gap: 15px; width: 100%; }
+        .color-picker { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        .color-picker input[type="color"] { width: 60px; height: 60px; border: 3px solid #fff; cursor: pointer; background: transparent; }
+        
+        .acc-picker { display: flex; flex-direction: column; align-items: center; margin-top: 10px; }
+        .acc-controls { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+        .btn-acc { min-width: 40px !important; padding: 10px !important; margin: 0 !important; }
+        #acc-name { width: 140px; text-align: center; font-size: 14px; }
+
+        .map-options { display: flex; flex-direction: column; gap: 10px; width: 100%; align-items: center; margin-top: 15px; }
+        .btn-map-item { width: 100%; max-width: 320px; padding: 12px; font-size: 13px; }
+        .btn-map-item.selected { border-color: #ffd700; color: #ffd700; }
+        
+        /* HUD */
+        #hud { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .hud-text { position: absolute; top: 20px; font-size: 14px; text-shadow: 2px 2px 0 #000; color: #fff; }
+        #hi-score { left: 20px; }
+        #current-score { left: 50%; transform: translateX(-50%); font-size: 20px; }
+        #coin-display { left: 20px; top: 50px; color: #ffd700; }
+        
+        #hamburger { 
+            position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; pointer-events: auto; 
+            color: #fff; text-shadow: 2px 2px 0 #000; 
+        }
+
+        /* NÚT ĐIỀU KHIỂN BÊN PHẢI MÀN HÌNH */
+        #touch-controls {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            pointer-events: auto;
+            z-index: 12;
+        }
+        .touch-btn {
+            min-width: 75px !important;
+            width: 75px;
+            height: 75px;
+            padding: 0 !important;
+            margin: 0 !important;
+            border-radius: 12px;
+            font-size: 28px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 3px solid #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+        }
+
+        #settings-menu { background: rgba(0,0,0,0.8); z-index: 20; }
+        #game-over-menu { background: rgba(0,0,0,0.7); }
+        .go-title { font-size: 30px; color: #ff4444; text-shadow: 3px 3px 0 #fff; margin-bottom: 20px; }
+        .go-score { font-size: 18px; margin-bottom: 30px; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="hud">
+        <div id="hi-score" class="hud-text">HI: 0</div>
+        <div id="coin-display" class="hud-text">COINS: 0</div>
+        <div id="current-score" class="hud-text">0</div>
+        <div id="hamburger">☰</div>
+
+        <!-- Nút điều khiển lên/xuống ở góc dưới bên phải -->
+        <div id="touch-controls">
+            <button id="btn-touch-up" class="touch-btn">▲</button>
+            <button id="btn-touch-down" class="touch-btn">▼</button>
+        </div>
+    </div>
+
+    <!-- MAIN MENU -->
+    <div id="main-menu" class="ui-layer active">
+        <h1 class="main-title">FAT<br>T-REX</h1>
+        <button id="btn-play">PLAY</button>
+        <button id="btn-skin">STORE</button>
+        <button id="btn-map">MAP</button>
+    </div>
+
+    <!-- STORE MENU -->
+    <div id="store-menu" class="ui-layer hidden">
+        <div class="store-panel">
+            <h2>STORE</h2>
+            <div id="store-coins" style="color:#ffd700; margin-bottom: 15px;">COINS: 0</div>
+            <canvas id="previewCanvas" width="120" height="120" style="border: 2px dashed #fff; background: #333; width:120px; height:120px;"></canvas>
+            
+            <div class="store-settings">
+                <div class="color-picker">
+                    <span>COLOR:</span>
+                    <input type="color" id="rex-color" value="#535353">
+                </div>
+                
+                <div class="acc-picker">
+                    <span>ACCESSORY:</span>
+                    <div class="acc-controls">
+                        <button class="btn-acc" id="btn-acc-prev">&lt;</button>
+                        <span id="acc-name">NONE</span>
+                        <button class="btn-acc" id="btn-acc-next">&gt;</button>
+                    </div>
+                </div>
+            </div>
+            
+            <button id="btn-apply-color">APPLY (20 COINS)</button>
+            <button id="btn-store-back" style="margin-top: 5px;">BACK</button>
+        </div>
+    </div>
+
+    <!-- MAP MENU -->
+    <div id="map-menu" class="ui-layer hidden">
+        <div class="store-panel">
+            <h2>SELECT MAP</h2>
+            <div id="map-coins" style="color:#ffd700; margin-bottom: 10px;">COINS: 0</div>
+            <div class="map-options">
+                <button class="btn-map-item" data-map="black">BLACK</button>
+                <button class="btn-map-item" data-map="red" style="background:#500; border-color:#f55;">RED</button>
+                <button class="btn-map-item" data-map="pink" style="background:#603; border-color:#f8c;">PINK</button>
+                <button class="btn-map-item" data-map="blue" style="background:#025; border-color:#4bf;">BLUE</button>
+                <button class="btn-map-item" data-map="green" style="background:#042; border-color:#4f8;">GREEN</button>
+                <button class="btn-map-item" data-map="purple" style="background:#305; border-color:#b5f;">PURPLE</button>
+            </div>
+            <button id="btn-map-back" style="margin-top: 15px;">BACK</button>
+        </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="settings-menu" class="ui-layer hidden">
+        <h2>SETTINGS</h2>
+        <button id="btn-sound">SOUND: ON</button>
+        <button id="btn-reset">RESTART</button>
+        <button id="btn-home">HOME</button>
+        <button id="btn-resume">RESUME</button>
+    </div>
+
+    <!-- GAME OVER -->
+    <div id="game-over-menu" class="ui-layer hidden">
+        <div class="go-title">GAME OVER!</div>
+        <div class="go-score" id="go-score-text">SCORE: 0</div>
+        <div style="font-size: 12px; color: #ffd700; margin-bottom: 20px;" id="go-coins-earned"></div>
+        <button id="btn-replay">PLAY AGAIN</button>
+        <button id="btn-go-home">HOME</button>
+    </div>
+</div>
+
+<script>
+/* ================= AUDIO SYSTEM ================= */
+const AudioSys = {
+    ctx: null, isMuted: false, isPlayingBGM: false,
+    init() { if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)(); },
+    playTone(freq, type, duration, vol=0.1, slideFreq=null) {
+        if (this.isMuted || !this.ctx) return;
+        let osc = this.ctx.createOscillator();
+        let gain = this.ctx.createGain();
+        osc.type = type; osc.connect(gain); gain.connect(this.ctx.destination);
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        if (slideFreq) osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + duration);
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        osc.start(); osc.stop(this.ctx.currentTime + duration);
+    },
+    jump() { this.playTone(300, 'square', 0.2, 0.1, 600); },
+    click() { this.playTone(600, 'sine', 0.1, 0.1); },
+    hit() { this.playTone(150, 'sawtooth', 0.3, 0.2, 50); },
+    coin() { this.playTone(800, 'sine', 0.1, 0.1, 1200); },
+    startBGM() {
+        if (this.isMuted || !this.ctx || this.isPlayingBGM) return;
+        this.isPlayingBGM = true;
+        const notes = [261.63, 329.63, 392.00, 523.25];
+        let step = 0;
+        this.bgmInterval = setInterval(() => {
+            if(!this.isMuted && this.isPlayingBGM) {
+                this.playTone(notes[step % notes.length], 'triangle', 0.2, 0.05);
+                step++;
+            }
+        }, 250);
+    },
+    stopBGM() {
+        this.isPlayingBGM = false;
+        clearInterval(this.bgmInterval);
+    }
+};
+
+/* ================= PIXEL ART MATRICES ================= */
+const SP_REX_RUN1 = [
+    "0000000000011111111100",
+    "0000000000011211111110",
+    "0000000000011111111110",
+    "0000000000011111111110",
+    "0000000000011111111110",
+    "0000000000011111000000",
+    "0000000000011111111100",
+    "0100000000111111100000",
+    "0100000001111111110000",
+    "0110000011111111111000",
+    "0111000111111111111000",
+    "0111101111111111111000",
+    "0111111111111111111000",
+    "0011111111111111111000",
+    "0001111111111111111000",
+    "0000111111111111110000",
+    "0000011111111111100000",
+    "0000001111111111000000",
+    "0000000111001111000000",
+    "0000000110000110000000",
+    "0000000110000100000000",
+    "0000000111000000000000"
+];
+const SP_REX_RUN2 = [
+    "0000000000011111111100",
+    "0000000000011211111110",
+    "0000000000011111111110",
+    "0000000000011111111110",
+    "0000000000011111111110",
+    "0000000000011111000000",
+    "0000000000011111111100",
+    "0100000000111111100000",
+    "0100000001111111110000",
+    "0110000011111111111000",
+    "0111000111111111111000",
+    "0111101111111111111000",
+    "0111111111111111111000",
+    "0011111111111111111000",
+    "0001111111111111111000",
+    "0000111111111111110000",
+    "0000011111111111100000",
+    "0000001111111111000000",
+    "0000000111100111000000",
+    "0000000011000110000000",
+    "0000000000000110000000",
+    "0000000000000111000000"
+];
+
+const SP_REX_DUCK_1 = [
+    "0000000000000000001111111110000000",
+    "0000000000000000001121111111000000",
+    "0000000000000000001111111111000000",
+    "0000000000000000001111111111000000",
+    "0000000000000000001111100000000000",
+    "0100000000000000001111111000000000",
+    "0110000000011111111111111110000000",
+    "0111000001111111111111111110000000",
+    "0111100111111111111111111110000000",
+    "0011111111111111111111111110000000",
+    "0001111111111111111111111100000000",
+    "0000011111111111111111110000000000",
+    "0000000111100011110000000000000000",
+    "0000000110000001100000000000000000",
+    "0000000111000001100000000000000000"
+];
+const SP_REX_DUCK_2 = [
+    "0000000000000000001111111110000000",
+    "0000000000000000001121111111000000",
+    "0000000000000000001111111111000000",
+    "0000000000000000001111111111000000",
+    "0000000000000000001111100000000000",
+    "0100000000000000001111111100000000",
+    "0110000000011111111111111110000000",
+    "0111000001111111111111111110000000",
+    "0111100111111111111111111110000000",
+    "0011111111111111111111111110000000",
+    "0001111111111111111111111100000000",
+    "0000011111111111111111110000000000",
+    "0000000111100011110000000000000000",
+    "0000000011000000110000000000000000",
+    "0000000000000001110000000000000000"
+];
+
+const MATRIX_CACTUS_LOW = [
+    "001100",
+    "001100",
+    "111110",
+    "111111",
+    "112111",
+    "011110",
+    "011120",
+    "011110"
+];
+const MATRIX_CACTUS_HIGH = [
+    "00111000",
+    "00111000",
+    "00111000",
+    "11111100",
+    "11111111",
+    "00112111",
+    "11111100",
+    "11211100",
+    "00111100",
+    "00111100",
+    "00111100",
+    "00111100"
+];
+
+const SP_BIRD_1 = ["000011000","000111000","001111100","011111111","111111110","001110000","000100000"];
+const SP_BIRD_2 = ["000100000","001110000","001111100","011111111","111111110","000111000","000011000"];
+
+const SP_CLOUD = [
+    "00011111000",
+    "00111111110",
+    "01111111111",
+    "11111111111",
+    "00111111100"
+];
+
+/* ================= ACCESSORY ================= */
+const ACC_PALETTE = {
+    '1': '#000000',
+    '2': '#dddddd',
+    '3': '#8b4513',
+    '4': '#ff0000',
+    '5': '#228b22',
+    '6': '#ffd700',
+    '7': '#1e90ff',
+    '8': '#ff69b4'
+};
+
+const ACC_CONFIG = {
+    'none': { name: 'NONE', matrix: null },
+    'sword': { name: 'SWORD', matrix: [
+        "00000000110",
+        "00000001210",
+        "00000012210",
+        "00000122100",
+        "00001221000",
+        "01101210000",
+        "16111100000",
+        "01611000000",
+        "00131000000",
+        "00010000000"
+    ], rx: 11, ry: 7, drx: 21, dry: 4 },
+    'axe': { name: 'AXE', matrix: [
+        "000011110",
+        "000122221",
+        "001222210",
+        "001221100",
+        "000131000",
+        "000131000",
+        "000131000",
+        "000131000",
+        "000010000"
+    ], rx: 11, ry: 6, drx: 21, dry: 3 },
+    'hammer': { name: 'HAMMER', matrix: [
+        "001111100",
+        "012222210",
+        "122222221",
+        "122222221",
+        "011131110",
+        "000131000",
+        "000131000",
+        "000131000",
+        "000131000"
+    ], rx: 11, ry: 5, drx: 21, dry: 2 },
+    'shuriken': { name: 'SHURIKEN', matrix: [
+        "0001000",
+        "0012100",
+        "0112110",
+        "1221221",
+        "0112110",
+        "0012100",
+        "0001000"
+    ], rx: 13, ry: 10, drx: 23, dry: 7 },
+    'gun': { name: 'GUN', matrix: [
+        "011111110",
+        "122222221",
+        "122111110",
+        "122100000",
+        "011000000"
+    ], rx: 12, ry: 10, drx: 22, dry: 7 },
+    'flower': { name: 'FLOWER', matrix: [
+        "0011100",
+        "0144410",
+        "1446441",
+        "0144410",
+        "0011100",
+        "0001510",
+        "0001510",
+        "0001510",
+        "0000100"
+    ], rx: 13, ry: 8, drx: 23, dry: 5 }
+};
+const accKeys = Object.keys(ACC_CONFIG);
+
+/* ================= MAP THEMES ================= */
+const MAPS = {
+    black:  { name: 'BLACK', bg: '#222222', ground: '#555555', cactus: '#228B22' },
+    red:    { name: 'RED', bg: '#3a0808', ground: '#ff4d4d', cactus: '#ff9999' },
+    pink:   { name: 'PINK', bg: '#3a0826', ground: '#ff69b4', cactus: '#ffb6c1' },
+    blue:   { name: 'BLUE', bg: '#081c3a', ground: '#38b6ff', cactus: '#70e000' },
+    green:  { name: 'GREEN', bg: '#083a15', ground: '#52b788', cactus: '#b7e4c7' },
+    purple: { name: 'PURPLE', bg: '#25083a', ground: '#a259ff', cactus: '#e0aaff' }
+};
+
+/* ================= DATA SYSTEM ================= */
+let Data = {
+    coins: parseInt(localStorage.getItem('coins')) || 0,
+    hiScore: parseInt(localStorage.getItem('hiScore')) || 0,
+    color: localStorage.getItem('rexColor') || '#535353',
+    accessory: localStorage.getItem('rexAcc') || 'none',
+    map: localStorage.getItem('selectedMap') || 'black',
+    unlockedMaps: JSON.parse(localStorage.getItem('unlockedMaps')) || ['black'],
+    save() {
+        localStorage.setItem('coins', this.coins);
+        localStorage.setItem('hiScore', this.hiScore);
+        localStorage.setItem('rexColor', this.color);
+        localStorage.setItem('rexAcc', this.accessory);
+        localStorage.setItem('selectedMap', this.map);
+        localStorage.setItem('unlockedMaps', JSON.stringify(this.unlockedMaps));
+    }
+};
+
+/* ================= GAME ENGINE & LOGIC ================= */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d', { alpha: false });
+
+let W, H;
+let baseSize = 4;
+let isMobile = false;
+let isNight = true;
+let gameState = 'menu';
+let playTime = 0, score = 0, gameSpeed = 0, bgX = 0;
+
+function resize() {
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W; canvas.height = H;
+    
+    // Kiểm tra xem thiết bị có phải di động hay màn hình nhỏ không
+    isMobile = ('ontouchstart' in window) || W < 768;
+    
+    // Tự động Phóng xa (Zoom out) cho điện thoại: Giảm tỉ lệ baseSize và hạ thấp độ cao mặt đất
+    if (isMobile) {
+        baseSize = Math.max(1, Math.floor(H / 180)); // Thu nhỏ vật thể lại để nhìn rộng hơn
+    } else {
+        baseSize = Math.max(2, Math.floor(H / 100)); 
+    }
+    
+    initClouds();
+    Rex.updateSprites();
+}
+window.addEventListener('resize', resize);
+
+function createPixelCanvas(matrix, pixelColor, outlineColor, scale, outlineWidth = 0) {
+    if(!matrix) return null;
+    let os = outlineWidth > 0 ? outlineWidth : (outlineColor ? scale : 0);
+    const c = document.createElement('canvas');
+    c.width = matrix[0].length * scale + os*2;
+    c.height = matrix.length * scale + os*2;
+    const cx = c.getContext('2d');
+    
+    if (outlineColor) {
+        cx.fillStyle = outlineColor;
+        for(let r=0; r<matrix.length; r++) {
+            for(let cCol=0; cCol<matrix[r].length; cCol++) {
+                if(matrix[r][cCol] !== '0') {
+                    let px = cCol*scale + os; 
+                    let py = r*scale + os;
+                    cx.fillRect(px - os, py - os, scale + os*2, scale + os*2);
+                }
+            }
+        }
+    }
+    
+    for(let r=0; r<matrix.length; r++) {
+        for(let cCol=0; cCol<matrix[r].length; cCol++) {
+            let val = matrix[r][cCol];
+            if(val === '0') continue;
+            let px = cCol*scale + os; 
+            let py = r*scale + os;
+            cx.fillStyle = (val==='1') ? pixelColor : '#fff'; 
+            cx.fillRect(px, py, scale, scale);
+        }
+    }
+    return c;
+}
+
+function createColorCanvas(matrix, scale) {
+    if(!matrix) return null;
+    const c = document.createElement('canvas');
+    c.width = matrix[0].length * scale;
+    c.height = matrix.length * scale;
+    const cx = c.getContext('2d');
+    for(let r=0; r<matrix.length; r++) {
+        for(let cCol=0; cCol<matrix[r].length; cCol++) {
+            let val = matrix[r][cCol];
+            if(val !== '0' && ACC_PALETTE[val]) {
+                cx.fillStyle = ACC_PALETTE[val];
+                cx.fillRect(cCol*scale, r*scale, scale, scale);
+            }
+        }
+    }
+    return c;
+}
+
+const Rex = {
+    x: 50, y: 0, w: 0, h: 0, 
+    vy: 0, gravity: 0.8, 
+    jumpForce: -15,
+    isJumping: false, isDucking: false, frame: 0, timer: 0,
+    sprites: { accessories: {} },
+    
+    updateSprites() {
+        let oc = isNight ? '#fff' : '#000';
+        let rc = Data.color;
+        this.sprites.run1 = createPixelCanvas(SP_REX_RUN1, rc, oc, baseSize);
+        this.sprites.run2 = createPixelCanvas(SP_REX_RUN2, rc, oc, baseSize);
+        this.sprites.duck1 = createPixelCanvas(SP_REX_DUCK_1, rc, oc, baseSize);
+        this.sprites.duck2 = createPixelCanvas(SP_REX_DUCK_2, rc, oc, baseSize);
+        
+        this.w = this.sprites.run1.width;
+        this.h = this.sprites.run1.height;
+        
+        // Điều chỉnh lực nhảy & trọng lực tương thích theo tỉ lệ thu nhỏ
+        let groundMargin = isMobile ? 30 : 50;
+        this.baseY = H - groundMargin - this.h; 
+        this.gravity = isMobile ? 1.2 : 0.8;
+        this.jumpForce = isMobile ? -11 : -15;
+
+        this.sprites.accessories = {};
+        for (let key of accKeys) {
+            if(ACC_CONFIG[key].matrix) {
+                this.sprites.accessories[key] = createColorCanvas(ACC_CONFIG[key].matrix, baseSize);
+            }
+        }
+    },
+    jump() {
+        if (!this.isJumping) {
+            this.vy = this.jumpForce;
+            this.isJumping = true;
+            this.isDucking = false;
+            AudioSys.jump();
+        }
+    },
+    duck() {
+        if (!this.isJumping) {
+            this.isDucking = true;
+        } else {
+            this.vy += isMobile ? 4 : 6; 
+        }
+    },
+    stand() { 
+        this.isDucking = false; 
+    },
+    update(dt) {
+        this.timer += dt;
+        if(this.timer > 100) { this.frame = 1 - this.frame; this.timer = 0; }
+        
+        this.vy += this.gravity;
+        this.y += this.vy;
+        
+        if (this.y >= this.baseY) {
+            this.y = this.baseY;
+            this.isJumping = false;
+            this.vy = 0;
+        }
+    },
+    draw() {
+        let img = this.sprites.run1;
+        let isDuckFrame = (this.isDucking && !this.isJumping);
+        
+        if (isDuckFrame) {
+            img = this.frame === 0 ? this.sprites.duck1 : this.sprites.duck2;
+            ctx.drawImage(img, this.x, this.y + (this.h - img.height));
+        } else {
+            if(!this.isJumping && this.frame === 1) img = this.sprites.run2;
+            ctx.drawImage(img, this.x, this.y);
+        }
+        
+        let accKey = Data.accessory || 'none';
+        if (accKey !== 'none' && this.sprites.accessories[accKey]) {
+            let acfg = ACC_CONFIG[accKey];
+            let accImg = this.sprites.accessories[accKey];
+            
+            let ax = this.x + (isDuckFrame ? acfg.drx * baseSize : acfg.rx * baseSize);
+            let ay = this.y + (isDuckFrame ? (this.h - this.sprites.duck1.height) + acfg.dry * baseSize : acfg.ry * baseSize);
+            
+            ctx.drawImage(accImg, ax, ay);
+        }
+    },
+    getHitbox() {
+        let scalePadding = baseSize * 2.5;
+        if(this.isDucking && !this.isJumping) {
+            return { 
+                x: this.x + scalePadding, 
+                y: this.y + (this.h - this.sprites.duck1.height) + scalePadding, 
+                w: this.sprites.duck1.width - (scalePadding * 2), 
+                h: this.sprites.duck1.height - scalePadding 
+            };
+        }
+        return { 
+            x: this.x + scalePadding, 
+            y: this.y + scalePadding, 
+            w: this.w - (scalePadding * 2), 
+            h: this.h - scalePadding 
+        };
+    }
+};
+
+/* ================= MÂY & CHƯỚNG NGẠI VẬT ================= */
+let clouds = [];
+let cloudImgs = [];
+function initClouds() {
+    let bs = Math.max(1, Math.floor(baseSize * 0.7));
+    cloudImgs = [
+        createPixelCanvas(SP_CLOUD, 'rgba(255,255,255,0.7)', null, bs),
+        createPixelCanvas(SP_CLOUD, 'rgba(255,255,255,0.5)', null, bs + 1),
+        createPixelCanvas(SP_CLOUD, 'rgba(255,255,255,0.3)', null, bs + 2)
+    ];
+}
+
+function updateDrawClouds(dt) {
+    if (gameState === 'playing' && Math.random() < 0.01 && clouds.length < 5) {
+        let randImg = cloudImgs[Math.floor(Math.random() * cloudImgs.length)];
+        clouds.push({
+            x: W + 50,
+            y: Math.random() * (H / 2 - 50) + 10,
+            speed: (Math.random() * 0.2 + 0.1),
+            img: randImg
+        });
+    }
+    
+    for (let i = clouds.length - 1; i >= 0; i--) {
+        let c = clouds[i];
+        if (gameState === 'playing') {
+            c.x -= gameSpeed * c.speed * (dt / 16);
+        }
+        if (c.img) ctx.drawImage(c.img, c.x, c.y);
+        if (c.x + 150 < 0) clouds.splice(i, 1);
+    }
+}
+
+let obstacles = [];
+let warnings = []; 
+let obsTimer = 0;
+
+function generateCactusCluster() {
+    let count = Math.floor(Math.random() * 3) + 1; 
+    let chosen = [];
+    let maxH = 0;
+    for(let i = 0; i < count; i++) {
+        let m = (Math.random() > 0.5) ? MATRIX_CACTUS_HIGH : MATRIX_CACTUS_LOW;
+        chosen.push(m);
+        if(m.length > maxH) maxH = m.length;
+    }
+    
+    let padded = chosen.map(m => {
+        let diff = maxH - m.length;
+        let w = m[0].length;
+        let pad = Array(diff).fill("0".repeat(w));
+        return pad.concat(m);
+    });
+    
+    let combined = [];
+    for(let r = 0; r < maxH; r++) {
+        let rowStr = padded.map(p => p[r]).join("");
+        combined.push(rowStr);
+    }
+    return combined;
+}
+
+function spawnObstacle() {
+    let currentMapTheme = MAPS[Data.map] || MAPS.black;
+    let cactusColor = currentMapTheme.cactus;
+    let type = Math.random();
+    let groundMargin = isMobile ? 30 : 50;
+    
+    if (type < 0.35 && score > 15) { 
+        let duckH = Rex.sprites.duck1 ? Rex.sprites.duck1.height : (baseSize * 15);
+        let birdH = baseSize * 9;
+        let yPos = (H - groundMargin - duckH) - birdH + (baseSize * 2);
+        let birdCount = Math.floor(Math.random() * 3) + 1; 
+
+        warnings.push({
+            y: yPos,
+            timer: 1200, 
+            birdCount: birdCount
+        });
+        return true; 
+    } else { 
+        let clusterMatrix = generateCactusCluster();
+        let cactusScale = Math.floor(baseSize * 1.25);
+        let img = createPixelCanvas(clusterMatrix, cactusColor, '#111', cactusScale, 2); 
+        let yPos = H - groundMargin - img.height;
+        
+        obstacles.push({ x: W + 50, y: yPos, img: img, isBird: false, frame: 0, timer: 0 });
+        return false;
+    }
+}
+
+function updateDrawObstacles(dt) {
+    obsTimer -= dt;
+    
+    if (obsTimer <= 0) {
+        let isBirdSpawned = spawnObstacle();
+        let minGap = isMobile ? 600 : 800; 
+        let randomGap = Math.random() * (isMobile ? 800 : 1100); 
+        let baseWait = (minGap + randomGap) * (15 / gameSpeed); 
+        
+        if (isBirdSpawned) {
+            obsTimer = 1200 + baseWait + 500; 
+        } else {
+            obsTimer = baseWait;
+        }
+    }
+
+    let oc = isNight ? '#fff' : '#000';
+    
+    for (let i = warnings.length - 1; i >= 0; i--) {
+        let w = warnings[i];
+        w.timer -= dt;
+
+        let flash = Math.floor(Date.now() / 150) % 2 === 0;
+        if (flash) {
+            ctx.save();
+            ctx.translate(W - 40, w.y + 15);
+            
+            ctx.beginPath();
+            ctx.moveTo(0, -25); 
+            ctx.lineTo(25, 20); 
+            ctx.lineTo(-25, 20); 
+            ctx.closePath();
+            
+            ctx.fillStyle = '#ffcc00'; 
+            ctx.fill();
+            ctx.lineWidth = 3;
+            ctx.strokeStyle = '#ff0000'; 
+            ctx.stroke();
+            
+            ctx.fillStyle = '#000000';
+            ctx.font = '20px "Press Start 2P"';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('!', 0, 8);
+            
+            ctx.restore();
+        }
+
+        if (w.timer <= 0) {
+            let c1 = createPixelCanvas(SP_BIRD_1, '#fff', oc, baseSize);
+            let c2 = createPixelCanvas(SP_BIRD_2, '#fff', oc, baseSize);
+            let birdGap = isMobile ? 50 : 85;
+            for(let k = 0; k < w.birdCount; k++) {
+                obstacles.push({ x: W + 30 + (k * birdGap), y: w.y, img: [c1, c2], isBird: true, frame: 0, timer: 0 });
+            }
+            warnings.splice(i, 1);
+        }
+    }
+    
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        let obs = obstacles[i];
+        obs.x -= gameSpeed * (dt / 16);
+        
+        if (obs.isBird) {
+            obs.timer += dt;
+            if(obs.timer > 150) { obs.frame = 1 - obs.frame; obs.timer = 0; }
+            ctx.drawImage(obs.img[obs.frame], obs.x, obs.y);
+        } else {
+            ctx.drawImage(obs.img, obs.x, obs.y);
+        }
+        
+        let rBox = Rex.getHitbox();
+        let oW = obs.isBird ? obs.img[0].width : obs.img.width;
+        let oH = obs.isBird ? obs.img[0].height : obs.img.height;
+        let oBox = { x: obs.x + 4, y: obs.y + 4, w: oW - 8, h: oH - 8 }; 
+        
+        if (rBox.x < oBox.x + oBox.w && rBox.x + rBox.w > oBox.x &&
+            rBox.y < oBox.y + oBox.h && rBox.y + rBox.h > oBox.y) {
+            gameOver();
+        }
+        
+        if (obs.x + oW < 0) obstacles.splice(i, 1);
+    }
+}
+
+function drawGround() {
+    let currentMapTheme = MAPS[Data.map] || MAPS.black;
+    let groundMargin = isMobile ? 30 : 50;
+    ctx.fillStyle = currentMapTheme.ground;
+    ctx.fillRect(0, H - groundMargin, W, 2);
+    bgX -= gameSpeed * 0.5;
+    if(bgX < -W) bgX = 0;
+    for(let i = 0; i < 10; i++) {
+        ctx.fillRect((bgX + i*(W/10))%W + W*(bgX+i*(W/10)<0?1:0), H - (groundMargin - 5) + (i%3)*5, 4, 2);
+    }
+}
+
+/* ================= GAME LOOP ================= */
+let lastTime = 0;
+function loop(timestamp) {
+    if (!lastTime) lastTime = timestamp;
+    let dt = timestamp - lastTime;
+    lastTime = timestamp;
+    
+    let currentMapTheme = MAPS[Data.map] || MAPS.black;
+
+    if (gameState === 'playing') {
+        playTime += dt / 1000;
+        score += dt / 1000;
+        document.getElementById('current-score').innerText = Math.floor(score);
+        
+        // Điều chỉnh tốc độ di chuyển phù hợp với tỉ lệ hiển thị thu nhỏ
+        let speedMultiplier = isMobile ? 0.07 : 0.1;
+        let maxSpeed = isMobile ? 16 : 22;
+        gameSpeed = 8 + (score * speedMultiplier);
+        if(gameSpeed > maxSpeed) gameSpeed = maxSpeed; 
+        
+        Rex.update(dt);
+        
+        ctx.fillStyle = currentMapTheme.bg;
+        ctx.fillRect(0, 0, W, H);
+        
+        updateDrawClouds(dt);
+        drawGround();
+        updateDrawObstacles(dt);
+        Rex.draw();
+        
+    } else if (gameState === 'menu' || gameState === 'store' || gameState === 'map') {
+        ctx.fillStyle = currentMapTheme.bg;
+        ctx.fillRect(0, 0, W, H);
+        updateDrawClouds(dt);
+        drawGround();
+    }
+    
+    requestAnimationFrame(loop);
+}
+
+/* ================= ĐIỀU KHIỂN & GIAO DIỆN ================= */
+function startGame() {
+    AudioSys.init(); AudioSys.click(); AudioSys.startBGM();
+    
+    document.getElementById('main-menu').classList.replace('active','hidden');
+    document.getElementById('game-over-menu').classList.replace('active','hidden');
+    document.getElementById('settings-menu').classList.replace('active','hidden');
+    document.getElementById('store-menu').classList.replace('active','hidden');
+    document.getElementById('map-menu').classList.replace('active','hidden');
+    document.getElementById('hud').style.display = 'block';
+    
+    document.getElementById('hi-score').innerText = "HI: " + Data.hiScore;
+    document.getElementById('coin-display').innerText = "COINS: " + Data.coins;
+    
+    isNight = true; playTime = 0; score = 0; 
+    gameSpeed = isMobile ? 8 : 10;
+    
+    clouds = [];
+    obstacles = [];
+    warnings = [];
+    Rex.y = H; 
+    Rex.updateSprites();
+    
+    gameState = 'playing';
+    lastTime = performance.now();
+}
+
+function gameOver() {
+    gameState = 'gameover';
+    AudioSys.hit(); AudioSys.stopBGM();
+    
+    let earned = Math.floor(score);
+    Data.coins += earned;
+    if (earned > Data.hiScore) Data.hiScore = earned;
+    Data.save();
+    
+    document.getElementById('go-score-text').innerText = "SCORE: " + earned;
+    document.getElementById('go-coins-earned').innerText = "+ " + earned + " COINS";
+    document.getElementById('game-over-menu').classList.replace('hidden','active');
+}
+
+function goHome() {
+    gameState = 'menu';
+    document.getElementById('game-over-menu').classList.replace('active', 'hidden');
+    document.getElementById('settings-menu').classList.replace('active', 'hidden');
+    document.getElementById('main-menu').classList.replace('hidden', 'active');
+    document.getElementById('hud').style.display = 'none';
+
+    clouds = [];
+    obstacles = [];
+    warnings = [];
+    score = 0;
+    playTime = 0;
+    Rex.updateSprites();
+}
+
+/* PHÍM CƠ NĂNG (BÀN PHÍM) */
+function handlePress(e) {
+    if(gameState !== 'playing') return;
+    if(e.code === 'Space' || e.code === 'ArrowUp') { Rex.jump(); e.preventDefault(); }
+    if(e.code === 'ShiftLeft' || e.code === 'ArrowDown') { Rex.duck(); e.preventDefault(); }
+}
+
+function handleRelease(e) {
+    if(gameState !== 'playing') return;
+    if(e.code === 'ShiftLeft' || e.code === 'ArrowDown') { Rex.stand(); }
+}
+
+window.addEventListener('keydown', handlePress);
+window.addEventListener('keyup', handleRelease);
+
+/* XỬ LÝ NÚT ĐIỀU KHIỂN CẢM ỨNG / CHUỘT */
+const btnTouchUp = document.getElementById('btn-touch-up');
+const btnTouchDown = document.getElementById('btn-touch-down');
+
+// Nút Nhảy ▲ (Ấn/Chạm 1 lần để nhảy)
+const handleJumpEvent = (e) => {
+    if (e.cancelable) e.preventDefault();
+    if (gameState === 'playing') Rex.jump();
+};
+btnTouchUp.addEventListener('touchstart', handleJumpEvent, { passive: false });
+btnTouchUp.addEventListener('mousedown', handleJumpEvent);
+
+// Nút Cúi ▼ (Đè để cúi, thả ra để đứng dậy)
+const handleDuckStart = (e) => {
+    if (e.cancelable) e.preventDefault();
+    if (gameState === 'playing') Rex.duck();
+};
+const handleDuckEnd = (e) => {
+    if (e.cancelable) e.preventDefault();
+    if (gameState === 'playing') Rex.stand();
+};
+
+btnTouchDown.addEventListener('touchstart', handleDuckStart, { passive: false });
+btnTouchDown.addEventListener('touchend', handleDuckEnd, { passive: false });
+btnTouchDown.addEventListener('touchcancel', handleDuckEnd, { passive: false });
+
+btnTouchDown.addEventListener('mousedown', handleDuckStart);
+btnTouchDown.addEventListener('mouseup', handleDuckEnd);
+btnTouchDown.addEventListener('mouseleave', handleDuckEnd);
+
+/* GIAO DIỆN & MENU */
+const btn = (id, fn) => document.getElementById(id).addEventListener('click', (e)=>{ AudioSys.init(); AudioSys.click(); fn(e); });
+
+btn('btn-play', startGame);
+btn('btn-replay', startGame);
+btn('btn-go-home', goHome);
+btn('btn-reset', () => { startGame(); });
+btn('btn-home', goHome);
+
+btn('hamburger', () => {
+    if(gameState === 'playing') {
+        gameState = 'paused';
+        AudioSys.stopBGM();
+        document.getElementById('settings-menu').classList.replace('hidden','active');
+    }
+});
+btn('btn-resume', () => {
+    gameState = 'playing';
+    AudioSys.startBGM();
+    document.getElementById('settings-menu').classList.replace('active','hidden');
+    lastTime = performance.now();
+});
+
+btn('btn-sound', (e) => {
+    AudioSys.isMuted = !AudioSys.isMuted;
+    e.target.innerText = "SOUND: " + (AudioSys.isMuted ? "OFF" : "ON");
+});
+
+/* STORE & MAP MENU */
+let currentAccIndex = accKeys.indexOf(Data.accessory || 'none');
+if (currentAccIndex === -1) currentAccIndex = 0;
+
+function updatePreview() {
+    let pCanvas = document.getElementById('previewCanvas');
+    let pCtx = pCanvas.getContext('2d');
+    pCtx.clearRect(0, 0, 120, 120);
+    
+    let previewImg = createPixelCanvas(SP_REX_RUN1, document.getElementById('rex-color').value, '#000', 5);
+    pCtx.drawImage(previewImg, 10, 10);
+    
+    let accKey = accKeys[currentAccIndex];
+    if (accKey !== 'none') {
+        let acfg = ACC_CONFIG[accKey];
+        let accImg = createColorCanvas(acfg.matrix, 5);
+        pCtx.drawImage(accImg, 10 + acfg.rx * 5, 10 + acfg.ry * 5);
+    }
+}
+
+btn('btn-skin', () => {
+    document.getElementById('main-menu').classList.replace('active','hidden');
+    document.getElementById('store-menu').classList.replace('hidden','active');
+    document.getElementById('store-coins').innerText = "COINS: " + Data.coins;
+    
+    document.getElementById('rex-color').value = Data.color;
+    currentAccIndex = accKeys.indexOf(Data.accessory || 'none');
+    document.getElementById('acc-name').innerText = ACC_CONFIG[accKeys[currentAccIndex]].name;
+    
+    updatePreview();
+});
+
+document.getElementById('rex-color').addEventListener('input', updatePreview);
+
+btn('btn-acc-prev', () => {
+    currentAccIndex = (currentAccIndex - 1 + accKeys.length) % accKeys.length;
+    document.getElementById('acc-name').innerText = ACC_CONFIG[accKeys[currentAccIndex]].name;
+    updatePreview();
+});
+
+btn('btn-acc-next', () => {
+    currentAccIndex = (currentAccIndex + 1) % accKeys.length;
+    document.getElementById('acc-name').innerText = ACC_CONFIG[accKeys[currentAccIndex]].name;
+    updatePreview();
+});
+
+btn('btn-apply-color', () => {
+    let newColor = document.getElementById('rex-color').value;
+    let newAcc = accKeys[currentAccIndex];
+    
+    if(newColor === Data.color && newAcc === Data.accessory) return; 
+    
+    if (Data.coins >= 20) {
+        Data.coins -= 20;
+        Data.color = newColor;
+        Data.accessory = newAcc;
+        Data.save();
+        AudioSys.coin();
+        document.getElementById('store-coins').innerText = "COINS: " + Data.coins;
+    } else {
+        alert('NOT ENOUGH COINS! (Need 20)');
+    }
+});
+
+btn('btn-store-back', () => {
+    document.getElementById('store-menu').classList.replace('active','hidden');
+    document.getElementById('main-menu').classList.replace('hidden','active');
+    Rex.updateSprites(); 
+});
+
+function updateMapUI() {
+    document.getElementById('map-coins').innerText = "COINS: " + Data.coins;
+    document.querySelectorAll('.btn-map-item').forEach(b => {
+        let mKey = b.dataset.map;
+        let isUnlocked = Data.unlockedMaps.includes(mKey);
+        let isSelected = Data.map === mKey;
+        
+        let label = MAPS[mKey].name;
+        if (!isUnlocked) label += " (50 COINS)";
+        b.innerText = label;
+
+        if (isSelected) b.classList.add('selected');
+        else b.classList.remove('selected');
+    });
+}
+
+btn('btn-map', () => {
+    document.getElementById('main-menu').classList.replace('active','hidden');
+    document.getElementById('map-menu').classList.replace('hidden','active');
+    updateMapUI();
+});
+
+document.querySelectorAll('.btn-map-item').forEach(b => {
+    b.addEventListener('click', (e) => {
+        AudioSys.init(); AudioSys.click();
+        let mKey = e.currentTarget.dataset.map;
+        
+        if (Data.unlockedMaps.includes(mKey)) {
+            Data.map = mKey;
+            Data.save();
+            updateMapUI();
+        } else {
+            if (Data.coins >= 50) {
+                Data.coins -= 50;
+                Data.unlockedMaps.push(mKey);
+                Data.map = mKey;
+                Data.save();
+                AudioSys.coin();
+                updateMapUI();
+            } else {
+                alert('NOT ENOUGH COINS! (Need 50 Coins)');
+            }
+        }
+    });
+});
+
+btn('btn-map-back', () => {
+    document.getElementById('map-menu').classList.replace('active','hidden');
+    document.getElementById('main-menu').classList.replace('hidden','active');
+});
+
+resize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
+
